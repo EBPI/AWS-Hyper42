@@ -1,0 +1,39 @@
+---
+- hosts: localhost
+
+  tasks:
+    - name: archive lambda
+      archive:
+        path: ./awslambda-1.0-SNAPSHOT.jar
+        format: zip
+
+    - name: my lambda function
+      lambda:
+        state: present
+        name: aws-lambda
+        zip_file: ./awslambda-1.0-SNAPSHOT.jar
+        runtime: java8
+        handler: com.hyper42.awslambda.MyLambdaHandler::handleRequest
+        role: "arn:aws:iam::184464116849:role/FIT-HYPER42-DEVTST-Users"
+        tags:
+          'responsible party': john.renne@visma.com
+
+    - name: Run my lambda
+      execute_lambda:
+        name: aws-lambda
+        payload:
+                          name: John
+                          message: Hello
+                          key3: value3
+        wait: true
+      register: response
+
+    - name: my lambda function
+      lambda:
+        state: absent
+        name: aws-lambda
+
+    - debug:
+        var: response
+
+

@@ -1,0 +1,28 @@
+---
+# vars file for aws-vpc
+ 
+aws_access_key: "AKIASV4XLBRYVLITBQUZ"
+aws_secret_key: "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"
+region: "eu-west-1"
+ 
+# VPC
+vpc_cidr: 10.178.11.240/28
+vpc_name: "Management VPC"
+ 
+# Subnet
+subnet_name: "Management Subnet"
+subnet_cidr: 10.178.11.240/28
+ 
+# Internet Gateway Name
+igw_name: "Management IGW"
+
+route_name: "Management Internet Route"
+ 
+securitygroup_name: "Management Security Group"
+ 
+ec2_tag: "Management jumpstation"
+ 
+#The local path to which we would save our EC2 Private Key
+ec2_key_directory: "/home/john/.ssh/"
+keypair_name: "mangement_ssh_keys"
+

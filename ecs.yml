@@ -1,0 +1,96 @@
+- name: Setup example networking (VPC, Security-Groups and Subnets)
+  hosts: localhost
+  tasks:
+
+    - name: Create VPC
+      ec2_vpc_net:
+        name: 'ECS VPC'
+        cidr_block: 10.178.8.0/28
+        region: eu-west-1
+        state: present
+      register: ecs_vpc
+
+    - name: Create Subnet 1 (in AZ A)
+      ec2_vpc_subnet:
+        vpc_id: "{{ ecs_vpc.vpc.id }}"
+        cidr: 10.178.8.0/28
+        az: eu-west-1a
+        region: eu-west-1
+        state: present
+      register: ecs_subnet_1
+
+
+    - name: Create Security group for Web traffic
+      ec2_group:
+        name: ECS-Webtraffic
+        description: Web Traffic for ECS
+        vpc_id: "{{ ecs_vpc.vpc.id }}"
+        region: eu-west-1
+        rules:
+          - proto: tcp
+            from_port: 80
+            to_port: 80
+            cidr_ip: 0.0.0.0/0
+        state: present
+      register: ecs_sec_group
+
+    - name: Create SSH key
+      ec2_key:
+        name: 'ecs_ssh_key'
+        wait: yes
+        state: present
+        region: eu-west-1
+
+- name: Setup ECS cluster inside the VPC
+  hosts: localhost
+  vars:
+    ecs_cluster_name: 'test-ecs-cluster'
+    ecs_ssh_key_name: 'ecs_ssh_key'
+    ecs_security_groups:
+      - "{{ ecs_sec_group.group_id }}"
+    ecs_vpc_subnets:
+      - "{{ ecs_subnet_1.id }}"
+    ecs_ec2_tags:
+      - Name: "ecs-ec2-cluster-instance"
+      - role: "ecs-cluster"
+    ecs_ec2_region: eu-west-1
+  tasks:
+        
+    - name: Create ECS Cluster
+      ecs_cluster:
+        name: "{{ ecs_cluster_name }}"
+        state: present
+      register: ecs_cluster
+          
+
+    # Setup services on your now running cluster, using the Ansible modules for ECS, like this:
+
+    - name: Create task definition for a service running in docker container(s)
+      ecs_taskdefinition:
+        family: nginx
+        containers:
+        - name: nginx
+          essential: true
+          image: "nginx"
+          portMappings:
+          - containerPort: 8080
+            hostPort: 8080
+          cpu: 2
+          memory: 1024
+
+            # needs more params here, see docs
+        region: "{{ ecs_ec2_region }}"
+        state: present
+      register: ecs_task_definition
+      
+    - name: Create service
+      ecs_service:
+        cluster: "{{ ecs_cluster_name }}"
+        name: service-nginx
+        task_definition: "{{ ecs_task_definition.taskdefinition.taskDefinitionArn }}"
+        region: "{{ ecs_ec2_region }}"
+        desired_count: 1
+        deployment_configuration:
+          minimum_healthy_percent: 100
+          maximum_percent: 200
+        state: present
