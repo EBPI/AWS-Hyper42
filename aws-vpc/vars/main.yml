@@ -21,23 +21,42 @@ aws_secret_key: !vault |
 region: "eu-west-1"
  
 # VPC
-vpc_cidr: 10.178.11.240/28
-vpc_name: "Management VPC"
- 
-# Subnet
-subnet_name: "Management Subnet"
-subnet_cidr: 10.178.11.240/28
- 
-# Internet Gateway Name
-igw_name: "Management IGW"
+vpc_cidr: 10.178.8.0/27
+vpc_name: "ANB Test VPC"
 
-route_name: "Management Internet Route"
+mgt_cidr: 10.178.11.240/28
+mgt_vpc_id: "vpc-0efdd7a16a96b48f8"
+mgt_routetable_id: "rtb-0eb989f132492587f"
+mgt_subnet_id: "subnet-016cb27e134435e69"
+route_name_backend_mgt: "anb backend naar mgt"
+route_name_frontend_mgt: "anb frontend naar mgt"
+route_name_mgt_backend: "mgt naar anb backend"
+route_name_mgt_frontend: "mgt naar anb frontend"
  
-securitygroup_name: "Management Security Group"
+# Subnets
+subnet_name_frontend: "ANB Test Frontend Subnet"
+subnet_cidr_frontend : 10.178.8.0/28
  
-ec2_tag: "Management jumpstation"
+# Subnets
+subnet_name_backend: "ANB Test Backend Subnet"
+subnet_cidr_backend : 10.178.8.16/28
+
+# Internet Gateway Name
+igw_name: "ANB Test IGW"
+
+route_name_frontend: "ANB Test Frontend Internet Route"
+
+route_name_backend: "ANB Test Backend Internet Route"
+
+securitygroup_name_frontend: "ANB Test Frontend Security Group"
+
+securitygroup_name_frontend: "ANB Test Backend  Security Group"
+
+ec2_tag_integration: "Integration Instances"
+ec2_tag_blockchain: "Blockchain Instances"
+
  
 #The local path to which we would save our EC2 Private Key
 ec2_key_directory: "/home/john/.ssh/"
-keypair_name: "mangement_ssh_keys"
+keypair_name: "anb_test"
 

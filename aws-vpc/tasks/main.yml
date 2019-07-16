@@ -16,18 +16,31 @@
      vpc_id: "{{ vpc.vpc.id }}"
 
 
- - name: associate subnet to the VPC
+ - name: associate frontend subnet to the VPC
    ec2_vpc_subnet:
     state: present
     vpc_id: "{{ vpc_id }}"
     region: "{{ region }}"
-    cidr: "{{ subnet_cidr }}"
+    cidr: "{{ subnet_cidr_frontend }}"
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     map_public: yes
     resource_tags:
-      Name: "{{ subnet_name }}"
-   register: subnet
+      Name: "{{ subnet_name_frontend }}"
+   register: subnet_frontend
+
+ - name: associate backend subnet to the VPC
+   ec2_vpc_subnet:
+    state: present
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    cidr: "{{ subnet_cidr_backend }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    map_public: yes
+    resource_tags:
+      Name: "{{ subnet_name_backend }}"
+   register: subnet_backend
 
  - name: create IGW
    ec2_vpc_igw:
@@ -48,18 +61,37 @@
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     subnets:
-      - "{{ subnet.subnet.id }}"
+      - "{{ subnet_frontend.subnet.id }}"
     routes:
       - dest: 0.0.0.0/0
         gateway_id: "{{ igw.gateway_id  }}"
     tags:
-      Name: "{{ route_name }}"
+      Name: "{{ route_name_frontend }}"
 
 
- - name: Create Security Group
+ - name: Create Frontend Security Group
    ec2_group:
-    name: Web DMZ
-    description: DMZ Security Group
+    name: ANB Test Frontend
+    description: ANB Frontend Security Group
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    rules:
+      - proto: tcp
+        ports:
+        - 443
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        ports:
+        - 22
+        cidr_ip: "{{ mgt_cidr }}"
+   register: security_group_frontend
+
+ - name: Create Backend Security Group
+   ec2_group:
+    name: ANB Test Backend
+    description: ANB Backend Security Group
     vpc_id: "{{ vpc_id }}"
     region: "{{ region }}"
     aws_access_key: "{{ aws_access_key }}"
@@ -68,8 +100,8 @@
       - proto: tcp
         ports:
         - 22
-        cidr_ip: 0.0.0.0/0
-   register: security_group
+        cidr_ip: "{{ mgt_cidr }}"
+   register: security_group_backend
 
  - name: create a new ec2 key pair, returns generated private key
    ec2_key:
@@ -87,7 +119,9 @@
     - ec2_key
 
  - name: Copy EC2 Key Pair private key locally
-   copy: content="{{ keypair.key.private_key }}" dest={{ ec2_key_directory }}mgt-key.ppk
+   copy: 
+     content: "{{ keypair.key.private_key }}"
+     dest: "{{ ec2_key_directory }}anb-key.ppk"
    when: keypair.changed == true
    tags:
     - ec2_key
@@ -96,12 +130,143 @@
    ec2:
     image: ami-08d658f84a6d84a80
     wait: yes
-    instance_type: t2.2xlarge
+    instance_type: t3.large
     region: "{{ region }}"
-    group_id: "{{ security_group.group_id }}"
-    vpc_subnet_id: "{{ subnet.subnet.id }}"
+    group_id: "{{ security_group_frontend.group_id }}"
+    vpc_subnet_id: "{{ subnet_frontend.subnet.id }}"
     key_name: "{{ keypair.key.name  }}"
-    count_tag: "{{ ec2_tag }}"
+    count_tag: "{{ ec2_tag_integration }}"
     exact_count: 1
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
+    assign_public_ip: yes
+    id: "ANB_FRONTEND_TST"
+
+ - name: Create EC2 Instances
+   ec2:
+    image: ami-08d658f84a6d84a80
+    wait: yes
+    instance_type: t3.medium
+    region: "{{ region }}"
+    group_id: "{{ security_group_backend.group_id }}"
+    vpc_subnet_id: "{{ subnet_backend.subnet.id }}"
+    key_name: "{{ keypair.key.name  }}"
+    count_tag: "{{ ec2_tag_blockchain }}"
+    exact_count: 3
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    assign_public_ip: no
+    id: "ANB_BACKEND_TST"
+ 
+ - name: Create EIP
+   ec2_eip: 
+     state: present
+     region: "{{ region }}" 
+     aws_access_key: "{{ aws_access_key }}"
+     aws_secret_key: "{{ aws_secret_key }}"
+   register: anb_test_eip  
+
+ 
+ - name: Create NAT gateway
+   ec2_vpc_nat_gateway: 
+     state: present
+     subnet_id: "{{ subnet_frontend.subnet.id }}"
+     region: "{{ region }}"
+     allocation_id: "{{ anb_test_eip.allocation_id }}"
+     if_exist_do_not_create: yes
+     aws_access_key: "{{ aws_access_key }}"
+     aws_secret_key: "{{ aws_secret_key }}"
+     wait: yes
+   register: anb_test_nat_gateway
+
+ - name: Route NAT
+   ec2_vpc_route_table:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    subnets:
+      - "{{ subnet_backend.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        nat_gateway_id: "{{ anb_test_nat_gateway.nat_gateway_id  }}"
+    tags:
+      Name: "{{ route_name_backend }}"
+
+ - name: Create peering connection
+   ec2_vpc_peer:
+     region: "{{ region }}"
+     vpc_id: "{{ vpc_id }}"
+     peer_vpc_id: "{{ mgt_vpc_id }}"
+     state: present
+     aws_access_key: "{{ aws_access_key }}"
+     aws_secret_key: "{{ aws_secret_key }}"
+   register: vpc_peer
+ 
+ - name: Accept peering connection
+   ec2_vpc_peer:
+     region: "{{ region }}"
+     peering_id: "{{ vpc_peer.peering_id }}"
+     state: accept
+     aws_access_key: "{{ aws_access_key }}"
+     aws_secret_key: "{{ aws_secret_key }}"
+   register: action_vpc_peer  
+
+ - name: Route VPC backend to MGT
+   ec2_vpc_route_table:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    subnets:
+      - "{{ subnet_backend.subnet.id }}"
+    routes:
+      - dest: "{{ mgt_cidr }}"
+        vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
+    tags:
+      Name: "{{ route_name_backend_mgt }}"
+
+
+ - name: Route VPC frontend to MGT
+   ec2_vpc_route_table:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    subnets:
+      - "{{ subnet_frontend.subnet.id }}"
+    routes:
+      - dest: "{{ mgt_cidr }}"
+        vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
+    tags:
+      Name: "{{ route_name_frontend_mgt }}"
+
+
+ - name: Route VPC MGT to frontend 
+   ec2_vpc_route_table:
+    vpc_id: "{{ mgt_vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    subnets:
+      - "{{ mgt_subnet_id }}"
+    routes:
+      - dest: "{{ subnet_cidr_frontend }}"
+        vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
+    tags:
+      Name: "{{ route_name_mgt_frontend }}"
+
+
+ - name: Route VPC MGT to backend 
+   ec2_vpc_route_table:
+    vpc_id: "{{ mgt_vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    subnets:
+      - "{{ mgt_subnet_id }}"
+    routes:
+      - dest: "{{ subnet_cidr_backend }}"
+        vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
+    tags:
+      Name: "{{ route_name_mgt_backend }}"
