@@ -67,7 +67,11 @@
         gateway_id: "{{ igw.gateway_id  }}"
     tags:
       Name: "{{ route_name_frontend }}"
+   register: frontend_routetable
 
+ - name: Set FE routetable ID in variable
+   set_fact:
+     fe_rt_id: "{{ frontend_routetable.route_table.route_table_id }}"
 
  - name: Create Frontend Security Group
    ec2_group:
@@ -140,7 +144,6 @@
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     assign_public_ip: yes
-    id: "ANB_FRONTEND_TST"
 
  - name: Create EC2 Instances
    ec2:
@@ -156,7 +159,6 @@
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     assign_public_ip: no
-    id: "ANB_BACKEND_TST"
  
  - name: Create EIP
    ec2_eip: 
@@ -192,6 +194,11 @@
         nat_gateway_id: "{{ anb_test_nat_gateway.nat_gateway_id  }}"
     tags:
       Name: "{{ route_name_backend }}"
+   register: backend_routetable
+
+ - name: Set BE routetable ID in variable
+   set_fact:
+     be_rt_id: "{{ backend_routetable.route_table.route_table_id }}"
 
  - name: Create peering connection
    ec2_vpc_peer:
@@ -218,13 +225,14 @@
     region: "{{ region }}"
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
+    lookup: id
+    route_table_id: "{{ be_rt_id }}"
+    purge_routes: no
     subnets:
       - "{{ subnet_backend.subnet.id }}"
     routes:
       - dest: "{{ mgt_cidr }}"
         vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
-    tags:
-      Name: "{{ route_name_backend_mgt }}"
 
 
  - name: Route VPC frontend to MGT
@@ -233,40 +241,43 @@
     region: "{{ region }}"
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
+    lookup: id
+    route_table_id: "{{ fe_rt_id }}"
+    purge_routes: no
     subnets:
       - "{{ subnet_frontend.subnet.id }}"
     routes:
       - dest: "{{ mgt_cidr }}"
         vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
-    tags:
-      Name: "{{ route_name_frontend_mgt }}"
 
 
  - name: Route VPC MGT to frontend 
    ec2_vpc_route_table:
     vpc_id: "{{ mgt_vpc_id }}"
     region: "{{ region }}"
+    lookup: id
+    route_table_id: "{{ mgt_route_table_id }}"
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
+    purge_routes: no
     subnets:
       - "{{ mgt_subnet_id }}"
     routes:
       - dest: "{{ subnet_cidr_frontend }}"
         vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
-    tags:
-      Name: "{{ route_name_mgt_frontend }}"
 
 
  - name: Route VPC MGT to backend 
    ec2_vpc_route_table:
     vpc_id: "{{ mgt_vpc_id }}"
     region: "{{ region }}"
+    lookup: id
+    route_table_id: "{{ mgt_route_table_id }}"
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
+    purge_routes: no
     subnets:
       - "{{ mgt_subnet_id }}"
     routes:
       - dest: "{{ subnet_cidr_backend }}"
         vpc_peering_connection_id: "{{ vpc_peer.peering_id  }}"
-    tags:
-      Name: "{{ route_name_mgt_backend }}"

@@ -28,10 +28,12 @@ mgt_cidr: 10.178.11.240/28
 mgt_vpc_id: "vpc-0efdd7a16a96b48f8"
 mgt_routetable_id: "rtb-0eb989f132492587f"
 mgt_subnet_id: "subnet-016cb27e134435e69"
-route_name_backend_mgt: "anb backend naar mgt"
-route_name_frontend_mgt: "anb frontend naar mgt"
-route_name_mgt_backend: "mgt naar anb backend"
-route_name_mgt_frontend: "mgt naar anb frontend"
+mgt_route_table_id: "rtb-0821b553cc7c95cd2"
+route_name_backend_mgt: "anb backend"
+route_name_frontend_mgt: "anb frontend"
+route_name_mgt_backend: "mgt"
+route_name_mgt_frontend: "mgt"
+
  
 # Subnets
 subnet_name_frontend: "ANB Test Frontend Subnet"
